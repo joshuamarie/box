@@ -1,5 +1,5 @@
 R_HOME ?= $(shell Rscript --vanilla -e 'cat(R.home())')
-rscript = ${R_HOME}/bin/Rscript --no-save --no-restore
+rscript = ${R_HOME}/bin/Rscript --no-save --no-restore -e 'Sys.unsetenv("R_BOX_PATH")'
 r = ${R_HOME}/bin/R --no-save --no-restore
 
 # Helper functions for a recursive wildcard function.
@@ -15,7 +15,7 @@ vignette_files = $(call rec_find,vignettes,*)
 rmd_files = $(wildcard vignettes/*.rmd)
 knit_results = $(patsubst vignettes/%.rmd,doc/%.md,${rmd_files})
 
-pkg_bundle_name := $(shell ${rscript} --vanilla -e 'cat(sprintf("%s.tar.gz\n", paste(read.dcf("DESCRIPTION")[1L, c("Package", "Version")], collapse = "_")))')
+pkg_bundle_name := $(shell ${rscript} -e 'cat(sprintf("%s.tar.gz\n", paste(read.dcf("DESCRIPTION")[1L, c("Package", "Version")], collapse = "_")))')
 
 cran-tmpdir = tmp.cran
 
