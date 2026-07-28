@@ -24,6 +24,16 @@ pkg_info = function (spec) {
     structure(list(name = spec$name), class = c('box$pkg_info', 'box$info'))
 }
 
+#' A \code{pkg_info} represents an existing, installed modules by `carrier`.
+#' @keywords internal
+#' @name info
+crr_info = function (spec, inst_mod_path) {
+    structure(
+        list(name = spec$name, inst_mod_path = inst_mod_path),
+        class = c('box$crr_info', 'box$info')
+    )
+}
+
 #' @export
 `print.box$info` = function (x, ...) {
     cat(as.character(x, ...), '\n', sep = '')
@@ -41,6 +51,11 @@ pkg_info = function (spec) {
     fmt('<mod_info: \x1B[33m{path}\x1B[0m>')
 }
 
+#' @export
+`as.character.box$crr_info` = function (x, ...) {
+    fmt('<mod_info: \x1B[33m{x$name}\x1B[0m at \x1B[33m{x$inst_mod_path}\x1B[0m>')
+}
+
 is_absolute = function (spec) {
     spec$prefix[1L] %in% c('.', '..')
 }
@@ -56,6 +71,18 @@ find_mod = function (spec, caller) {
 `find_mod.box$pkg_spec` = function (spec, caller) {
     pkg_info(spec)
 }
+
+`find_mod.box$crr_spec` = function (spec, caller) {
+    find_in_path(spec, crr_mod_search_path(caller))
+}
+
+# `find_mod.box$crr_spec` = function (spec, caller) {
+#     # NEW: `carrier` acts like `npm` that manages JS libraries
+#     # `box` is able to import the installed modules
+#     # Whether on the global path or the local `.mod/`
+#     info = find_in_path(spec, crr_mod_search_path(caller))
+#     crr_info(spec, info$source_path)
+# }
 
 find_local_mod = function (spec, caller) {
     find_in_path(spec, calling_mod_path(caller))

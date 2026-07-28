@@ -253,6 +253,36 @@ mod_search_path = function (caller) {
     )
 }
 
+#' Installed modules related functions
+#'
+#' \code{crr_mod_search_path} returns the character vector of paths where module
+#' code can be located and will be found by \pkg{box}.
+#'
+#' @note The search paths are ordered from highest to lowest priority.
+#' The current module’s path always has the lowest priority.
+#'
+#' There are two ways of modifying the module search path: by default,
+#' \code{getOption('box.path')} specifies the search path as a character vector.
+#' Users can override its value by separately setting the environment variable
+#' \env{R_BOX_PATH} to one or more paths, separated by the platform’s path
+#' separator (\dQuote{:} on UNIX-like systems, \dQuote{;} on Windows).
+#' @keywords internal
+#' @name paths
+crr_mod_search_path = function (caller) {
+    # renv_mod = file.path(getwd(), 'renv', 'carrier')
+    # renv_paths = if (dir.exists(renv_mod)) renv_mod else character(0L)
+
+    global_mod = file.path(
+        Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
+        '.carrier',
+        'modules'
+    )
+    global_paths = if (dir.exists(global_mod)) global_mod else character(0L)
+
+    # c(renv_paths, global_paths)
+    global_paths
+}
+
 #' \code{calling_mod_path} determines the path of the module code that is
 #' currently calling into the \pkg{box} package.
 #'

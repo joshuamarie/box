@@ -37,8 +37,28 @@ parse_spec = function (expr, alias) {
     spec = parse_spec_impl(expr)
 
     is_pkg = 'pkg' %in% names(spec)
-    spec_type = if (is_pkg) pkg_spec else mod_spec
     name = spec[[if (is_pkg) 'pkg' else 'mod']]$name
+    root = if (is_pkg) name else spec$mod$prefix[1L]
+    search_paths = crr_mod_search_path(parent.frame())
+
+    # Special imports: packages under `carrier`
+    # It won't hit unless the parsed spec detects
+    # Packages from `carrier`
+    if (root %in% crr_available_roots(search_paths)) {
+        crr = crr_spec_parser(
+            spec = spec,
+            root = root,
+            name = name,
+            prefix = if (is_pkg) '.' else spec$mod$prefix,
+            alias = alias,
+            search_paths = search_paths
+        )
+
+        if (!is.null(crr)) return(crr)
+    }
+
+    # Then return from the original
+    spec_type = if (is_pkg) pkg_spec else mod_spec
     spec_type(spec, alias = alias %||% name, explicit = nzchar(alias))
 }
 
@@ -62,6 +82,89 @@ pkg_spec = function (spec, ...) {
 
 #' @keywords internal
 #' @name spec
+crr_spec = function (spec, ...) {
+    extra_spec = spec[setdiff(names(spec), 'crr_pkg')]
+    structure(
+        c(spec$crr_pkg, extra_spec, ...),
+        class = c('box$crr_spec', 'box$spec')
+    )
+}
+
+#' @keywords internal
+#' @name crr-spec
+crr_cache = new.env(parent = emptyenv())
+
+#' @keywords internal
+#' @name crr-spec
+crr_available_roots = function (search_paths) {
+    key = paste(search_paths, collapse = '|')
+
+    if (is.null(crr_cache[[key]])) {
+        listed = unlist(lapply(search_paths, list.files, full.names = FALSE))
+        crr_cache[[key]] = unique(sub('\\.[^.]*$', '', listed))
+    }
+
+    crr_cache[[key]]
+}
+
+#' Autonomous `carrier` modules spec parser
+#'
+#' @details
+#' Loading `carrier` modules is a separate thing while borrows the syntax,
+#' except loading `carrier` modules doesn't allow prefixes (`./`, `../`)
+#'
+#' ``` r
+#' # Good
+#' box::use(
+#'     crr_module,
+#'     crr_module/mod,
+#'     crr_module/mod[fn1, ...],
+#'     cm = crr_module,
+#' )
+#'
+#' # Bad
+#' box::use(
+#'     ./crr_module,
+#'     ./crr_module/mod,
+#'     ./crr_module/mod[fn1, ...],
+#'     cm = ./crr_module,
+#' )
+#' ```
+#'
+#' @keywords internal
+#' @name crr-spec-parser
+crr_spec_parser = function (spec, root, name, prefix, alias, search_paths) {
+    if ('mod' %in% names(spec) && spec$mod$prefix[1L] %in% c('.', '..')) {
+        return(NULL)
+    }
+
+    root_spec = crr_spec(
+        list(
+            crr_pkg = list(name = root),
+            attach = NULL,
+            alias = root,
+            explicit = FALSE,
+            prefix = '.'
+        )
+    )
+    candidates = mod_file_candidates(root_spec, search_paths)
+    hits = map(file.exists, candidates)
+
+    if (!any(map_lgl(any, hits))) return(NULL)
+
+    name_io = list(
+        crr_pkg = list(name = name),
+        attach = spec$attach,
+        alias = alias %||% name,
+        explicit = nzchar(alias),
+        prefix = prefix
+    )
+
+    crr_spec(name_io)
+}
+
+#' @keywords internal
+#' @name spec
 spec_name = function (spec) {
     UseMethod('spec_name')
 }
@@ -73,6 +176,11 @@ spec_name = function (spec) {
 
 #' @export
 `spec_name.box$pkg_spec` = function (spec) {
+    spec$name
+}
+
+#' @export
+`spec_name.box$crr_spec` = function (spec) {
     spec$name
 }
 
@@ -110,7 +218,9 @@ spec_name = function (spec) {
     }
 
     mod_or_pkg = function (spec) {
-        if (inherits(spec, 'box$mod_spec')) {
+        if (inherits(spec, 'box$crr_spec')) {
+            fmt('mod_crr(\x1b[4;33m{r_name(spec$prefix)}/{r_name(spec$name)}\x1b[0m)')
+        } else if (inherits(spec, 'box$mod_spec')) {
             prefix = paste(r_name(spec$prefix), collapse = '/')
             fmt('mod({prefix}/\x1b[4;33m{r_name(spec$name)}\x1b[0m)')
         } else {
