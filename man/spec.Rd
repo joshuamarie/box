@@ -5,6 +5,7 @@
 \alias{parse_spec}
 \alias{mod_spec}
 \alias{pkg_spec}
+\alias{crr_spec}
 \alias{spec_name}
 \title{Parse a mod or pkg spec expression passed to \code{use}}
 \usage{
@@ -13,6 +14,8 @@ parse_spec(expr, alias)
 mod_spec(spec, ...)
 
 pkg_spec(spec, ...)
+
+crr_spec(spec, ...)
 
 spec_name(spec)
 }

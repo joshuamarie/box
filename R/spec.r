@@ -91,11 +91,11 @@ crr_spec = function (spec, ...) {
 }
 
 #' @keywords internal
-#' @name crr-spec
+#' @rdname crr-spec
 crr_cache = new.env(parent = emptyenv())
 
 #' @keywords internal
-#' @name crr-spec
+#' @rdname crr-spec
 crr_available_roots = function (search_paths) {
     key = paste(search_paths, collapse = '|')
 
@@ -132,7 +132,7 @@ crr_available_roots = function (search_paths) {
 #' ```
 #'
 #' @keywords internal
-#' @name crr-spec-parser
+#' @name crr-spec
 crr_spec_parser = function (spec, root, name, prefix, alias, search_paths) {
     if ('mod' %in% names(spec) && spec$mod$prefix[1L] %in% c('.', '..')) {
         return(NULL)

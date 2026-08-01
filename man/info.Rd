@@ -4,11 +4,14 @@
 \alias{info}
 \alias{mod_info}
 \alias{pkg_info}
+\alias{crr_info}
 \title{Information about a physical module or package}
 \usage{
 mod_info(spec, source_path)
 
 pkg_info(spec)
+
+crr_info(spec, inst_mod_path)
 }
 \arguments{
 \item{spec}{a \code{mod_spec} or \code{pkg_spec} (for \code{mod_info} and
