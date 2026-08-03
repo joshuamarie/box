@@ -272,6 +272,11 @@ crr_mod_search_path = function (caller) {
     # renv_mod = file.path(getwd(), 'renv', 'carrier')
     # renv_paths = if (dir.exists(renv_mod)) renv_mod else character(0L)
 
+    override_mod = Sys.getenv('CARRIER_LIB')
+    if (nzchar(override_mod)) {
+        return(override_mod)
+    }
+
     global_mod = file.path(
         Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
         '.carrier',
