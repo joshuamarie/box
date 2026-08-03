@@ -97,7 +97,7 @@ crr_cache = new.env(parent = emptyenv())
 #' @keywords internal
 #' @rdname crr-spec
 crr_available_roots = function (search_paths) {
-    key = paste(search_paths, collapse = '|')
+    key = if (length(search_paths) == 0L) '<none>' else paste(search_paths, collapse = '|')
 
     if (is.null(crr_cache[[key]])) {
         listed = unlist(lapply(search_paths, list.files, full.names = FALSE))
