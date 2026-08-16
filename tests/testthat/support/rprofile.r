@@ -14,8 +14,7 @@ local({
     # configuration.
 
     unloadNamespace('box')
-    devtools::load_all(Sys.getenv('BOX_TESTING_BASEDIR'), quiet = TRUE, export_all = FALSE)
-    detach('package:box')
+    pkgload::load_all(Sys.getenv('BOX_TESTING_BASEDIR'), quiet = TRUE, attach = FALSE, export_all = FALSE)
 
     # … and load the original user profile, if it exists.
 
