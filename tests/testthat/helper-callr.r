@@ -94,8 +94,4 @@ interactive_r = function (script_path, text, code) {
     result[1 : (end - 3L)]
 }
 
-local({
-    in_tests = grepl('tests/testthat$', getwd())
-    basedir = if (in_tests) dirname(dirname((getwd()))) else getwd()
-    Sys.setenv(BOX_TESTING_BASEDIR = basedir)
-})
+Sys.setenv(BOX_TESTING_BASEDIR = dirname(dirname(testthat::test_path())))

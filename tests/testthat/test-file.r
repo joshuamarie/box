@@ -22,10 +22,10 @@ test_that('box::base_path works', {
     script_path = 'support/devtools_segfault.r'
 
     rcmd_result = rcmd(script_path)
-    expect_paths_equal(rcmd_result, file.path(getwd(), 'support'))
+    expect_paths_equal(rcmd_result, testthat::test_path('support'))
 
     rscript_result = rscript(script_path)
-    expect_paths_equal(rscript_result, file.path(getwd(), 'support'))
+    expect_paths_equal(rscript_result, testthat::test_path('support'))
 })
 
 test_that('box::file works after attaching modules', {
