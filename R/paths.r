@@ -282,10 +282,16 @@ crr_mod_search_path = function (caller) {
         '.carrier',
         'modules'
     )
-    global_paths = if (dir.exists(global_mod)) global_mod else character(0L)
 
+    # global_paths = if (dir.exists(global_mod)) global_mod else character(0L)
     # c(renv_paths, global_paths)
-    global_paths
+    # global_paths
+
+    if (dir.exists(global_mod)) {
+        global_mod
+    } else {
+        character(0L)
+    }
 }
 
 #' \code{calling_mod_path} determines the path of the module code that is
