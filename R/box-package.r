@@ -63,6 +63,7 @@
         || called_from_ci()
         # `utils::example` also attaches the package.
         || called_from_example()
+        || called_from_dot_load_package_quietly()
     ) return()
 
     is_bad_call = function (call) {
@@ -104,8 +105,7 @@ called_from_ci = function () {
 
 called_from_example = function () {
     utils_ns = getNamespace('utils')
-    example = quote(example)
-    frames = sys.frame()
+    example_call = quote(example)
     # N.B.: This only handles direct, unqualified calls, i.e.
     #   example(…)
     # it fails with other forms, such as
@@ -113,9 +113,21 @@ called_from_example = function () {
     #   get('example')(…)
     # etc.
     is_example_call = function (i)
-        sys.call(i)[[1L]] %==% example &&
+        sys.call(i)[[1L]] %==% example_call &&
             base::topenv(sys.frame(i)) %==% utils_ns
     any(map_lgl(is_example_call, seq_len(sys.nframe())))
+}
+
+called_from_dot_load_package_quietly = function () {
+    tools_ns = getNamespace('tools')
+    load_call = quote(.load_package_quietly)
+    # N.B.: This only handles direct, unqualified calls, i.e.
+    #   .load_package_quietly(…)
+    # it fails with other forms.
+    is_load_call = function (i)
+        sys.call(i)[[1L]] %==% load_call &&
+            base::topenv(sys.frame(i)) %==% tools_ns
+    any(map_lgl(is_load_call, seq_len(sys.nframe())))
 }
 
 import_env_parent = NULL

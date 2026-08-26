@@ -1,4 +1,4 @@
-# box (development version)
+# box 1.2.3
 
 ## New and improved features
 
