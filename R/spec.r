@@ -44,7 +44,7 @@ parse_spec = function (expr, alias) {
     # Special imports: packages under `carrier`
     # It won't hit unless the parsed spec detects
     # Packages from `carrier`
-    if (root %in% crr_available_roots(search_paths)) {
+    if (crr_root_exists(root, search_paths)) {
         crr = crr_spec_parser(
             spec = spec,
             root = root,
@@ -96,15 +96,18 @@ crr_cache = new.env(parent = emptyenv())
 
 #' @keywords internal
 #' @rdname crr-spec
-crr_available_roots = function (search_paths) {
-    key = if (length(search_paths) == 0L) '<none>' else paste(search_paths, collapse = '|')
-
-    if (is.null(crr_cache[[key]])) {
+crr_root_exists = function (root, search_paths) {
+    roots = crr_cache[['.roots']]
+    if (is.null(roots)) {
         listed = unlist(lapply(search_paths, list.files, full.names = FALSE))
-        crr_cache[[key]] = unique(sub('\\.[^.]*$', '', listed))
+        names = unique(sub('\\.[^.]*$', '', listed))
+        roots = new.env(parent = emptyenv())
+        for (name in names) {
+            roots[[name]] = TRUE
+        }
+        crr_cache[['.roots']] = roots
     }
-
-    crr_cache[[key]]
+    exists(root, envir = roots, inherits = FALSE)
 }
 
 #' Autonomous `carrier` modules spec parser
@@ -138,6 +141,32 @@ crr_spec_parser = function (spec, root, name, prefix, alias, search_paths) {
         return(NULL)
     }
 
+    name_io = list(
+        crr_pkg = list(name = name),
+        attach = spec$attach,
+        alias = alias %||% name,
+        explicit = nzchar(alias),
+        prefix = prefix
+    )
+
+    # Bare package import (`box::use(crr_module)`):
+    # the root check and the final resolution target the same candidate paths,
+    # so resolve once here and carry the result forward instead of stat-ing
+    # the same files twice.
+    if (identical(prefix, '.') && identical(name, root)) {
+        crr = crr_spec(name_io)
+        info = find_in_path(crr, search_paths, strict = FALSE)
+
+        if (is.null(info)) return(NULL)
+
+        attr(crr, 'resolved_info') = info
+        return(crr)
+    }
+
+    # Submodule import (`box::use(crr_module/mod)`):
+    # root and target are different candidate paths, both checks are needed,
+    # keep them separate so a missing submodule still produces the carrier-specific
+    # not-found error instead of silently falling through to ordinary box resolution.
     root_spec = crr_spec(
         list(
             crr_pkg = list(name = root),
@@ -151,14 +180,6 @@ crr_spec_parser = function (spec, root, name, prefix, alias, search_paths) {
     hits = map(file.exists, candidates)
 
     if (!any(map_lgl(any, hits))) return(NULL)
-
-    name_io = list(
-        crr_pkg = list(name = name),
-        attach = spec$attach,
-        alias = alias %||% name,
-        explicit = nzchar(alias),
-        prefix = prefix
-    )
 
     crr_spec(name_io)
 }

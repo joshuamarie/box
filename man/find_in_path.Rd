@@ -4,17 +4,23 @@
 \alias{find_in_path}
 \title{Find a module’s source location}
 \usage{
-find_in_path(spec, base_paths)
+find_in_path(spec, base_paths, strict = TRUE)
 }
 \arguments{
 \item{spec}{a \code{mod_spec}.}
 
 \item{base_paths}{a character vector of paths to search the module in, in
 order of preference.}
+
+\item{strict}{whether to throw an error if the module cannot be found.
+When \code{FALSE}, a failed lookup returns \code{NULL} instead, for
+callers that need to test for existence without treating a miss as fatal
+(e.g. \code{crr_spec_parser}'s bare-package check).}
 }
 \value{
 \code{find_in_path} returns a \code{mod_info} that specifies the
-module source location.
+module source location, or \code{NULL} if the module was not found and
+\code{strict} is \code{FALSE}.
 }
 \description{
 Find a module’s source location
