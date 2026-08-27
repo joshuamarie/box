@@ -277,21 +277,21 @@ crr_mod_search_path = function (caller) {
     #     return(override_mod)
     # }
 
-    global_mod = file.path(
-        Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
-        '.carrier',
-        'modules'
-    )
+    if (is.null(crr_cache[['.search_path']])) {
+        global_mod = file.path(
+            Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
+            '.carrier',
+            'modules'
+        )
 
-    # global_paths = if (dir.exists(global_mod)) global_mod else character(0L)
-    # c(renv_paths, global_paths)
-    # global_paths
+        # global_paths = if (dir.exists(global_mod)) global_mod else character(0L)
+        # c(renv_paths, global_paths)
+        # global_paths
 
-    if (dir.exists(global_mod)) {
-        global_mod
-    } else {
-        character(0L)
+        crr_cache[['.search_path']] = if (dir.exists(global_mod)) global_mod else character(0L)
     }
+
+    crr_cache[['.search_path']]
 }
 
 #' \code{calling_mod_path} determines the path of the module code that is
