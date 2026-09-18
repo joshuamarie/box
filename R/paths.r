@@ -280,7 +280,7 @@ crr_mod_search_path = function (caller) {
     if (is.null(crr_cache[['.search_path']])) {
         global_mod = file.path(
             Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
-            '.carrier',
+            '.baler',
             'modules'
         )
 
