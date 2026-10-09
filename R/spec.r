@@ -30,16 +30,26 @@
 #'  \item{\code{alias}}{the module or package alias}
 #'  \item{\code{explicit}}{a logical value indicating whether the caller
 #'      provided an explicit alias}
+#'  \item{\code{lazy}}{a logical value indicating whether the caller lazily
+#'      import the module}
 #' }
 #' @keywords internal
 #' @name spec
 parse_spec = function (expr, alias) {
-    spec = parse_spec_impl(expr)
+    is_lazy = is_lazy_import(expr)
+    spec = parse_spec_impl(if (is_lazy) expr[[2L]] else expr)
+    if (is_lazy && anyNA(spec$attach)) {
+        throw('cannot lazily import all names in {expr;"}; list the names or remove the leading ~')
+    }
 
     is_pkg = 'pkg' %in% names(spec)
     spec_type = if (is_pkg) pkg_spec else mod_spec
     name = spec[[if (is_pkg) 'pkg' else 'mod']]$name
-    spec_type(spec, alias = alias %||% name, explicit = nzchar(alias))
+    spec_type(spec, alias = alias %||% name, explicit = nzchar(alias), lazy = is_lazy)
+}
+
+is_lazy_import = function (expr) {
+    is.call(expr) && expr[[1L]] == "~" && length(expr) == 2L
 }
 
 #' @param spec named list of information the parser constructed from a given
