@@ -374,8 +374,10 @@ lazy_import = function (spec, info, caller) {
         }
         exports_cache$exports
     }
+    
     if (is.null(spec$attach) || is.null(spec$explicit)) {
-        delayedAssign(spec$alias, import_when_used(), assign.env = caller)
+        # delayedAssign(spec$alias, import_when_used(), assign.env = caller)
+        bind_attached(spec$alias, export_name = NULL, import_env = caller, import_when_used = import_when_used)
     }
     
     if (! is.null(spec$attach)) {
@@ -390,9 +392,16 @@ lazy_import = function (spec, info, caller) {
 bind_attached = function (alias, export_name, import_env, import_when_used) {
     force(alias)
     force(export_name)
+
+    promise = function () {
+        mod_exports = import_when_used()
+        if (is.null(export_name)) {
+            mod_exports
+        } else {
+            env_get(mod_exports, export_name)
+        }
+    }
     
-    promise = function () 
-        env_get(import_when_used(), export_name)
     delayedAssign(alias, promise(), assign.env = import_env)
 }
 
