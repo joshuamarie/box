@@ -9,6 +9,7 @@
 #' @usage \special{box::use(alias = pkg, \dots)}
 #' @usage \special{box::use(prefix/mod[attach_list], \dots)}
 #' @usage \special{box::use(pkg[attach_list], \dots)}
+#' @usage \special{box::use(lazy(declaration), \dots)}
 #'
 #' @param prefix/mod a qualified module name
 #' @param pkg a package name
@@ -83,6 +84,15 @@
 #' \code{fun<-}) must be \emph{attached} to be usable, because \R syntactically
 #' does not allow assignment calls where the left-hand side of the assignment
 #' contains \code{$}.
+#'
+#' @section Lazy imports:
+#' Wrapping a declaration in \code{lazy()}, as in \code{lazy(pkg)},
+#' \code{alias = lazy(prefix/mod)} or \code{lazy(pkg[attach_list])}, delays
+#' loading until one of its names is first used. The target is still located
+#' and checked when \code{box::use} is called, so a typo fails immediately, but
+#' module \code{.on_load} hooks only run at first use. \code{lazy()} must be
+#' the outermost call of its declaration, and \code{attach_list} cannot contain
+#' \code{\dots}. \code{lazy} is only a marker: calling it directly is an error.
 #'
 #' @section Export specification:
 #'
@@ -245,6 +255,13 @@ use = function (...) {
     invisible()
 }
 
+# #' @usage NULL
+# #' @rdname use
+# #' @export
+# lazy = function (mod) {
+#     throw('lazy() can only be used inside a declaration of box::use()')
+# }
+
 #' Import a module or package
 #'
 #' Actual implementation of the import process
@@ -256,13 +273,18 @@ use = function (...) {
 #'
 #' \code{load_and_register} performs the loading, attaching and exporting of a
 #' module identified by its spec and info.
-#' 
+#'
 #' \code{lazy_import} imports a use declaration that is marked as lazy
-#' (prefixed with \code{~}). The declaration is parsed and located as usual, but
-#' the module or package is not loaded until the imported name is first used:
-#' the alias is bound to a promise that calls \code{lazy_exports}. Declarations
-#' with an attach list are not deferred yet and are imported by
-#' \code{load_and_register}.
+#' (wrapped in \code{lazy()}). The declaration is parsed and located as usual,
+#' but the module or package is not loaded until an imported name is first used:
+#' the alias, if the declaration creates one, and each name in the attach list
+#' are bound to promises that call \code{lazy_exports}. All promises of one
+#' declaration share a single load.
+#'
+#' \code{check_lazy_target} runs when a lazy import is declared. It makes sure
+#' that the target can be loaded later, without loading it now, so that a typo
+#' fails at the \code{use} call instead of at first use. Modules are already
+#' checked when they are located; packages are not, so they are checked here.
 #'
 #' \code{lazy_exports} performs the work that \code{lazy_import} defers: it
 #' loads the module or package, registers the import, builds the export
@@ -364,7 +386,8 @@ load_and_register = function (spec, info, caller) {
 lazy_import = function (spec, info, caller) {
     force(info)
     force(caller)
-    
+    check_lazy_target(info)
+
     exports_cache = new.env()
     import_when_used = function () {
         if (is.null(exports_cache$exports)) {
@@ -374,18 +397,34 @@ lazy_import = function (spec, info, caller) {
         }
         exports_cache$exports
     }
-    
-    if (is.null(spec$attach) || is.null(spec$explicit)) {
-        # delayedAssign(spec$alias, import_when_used(), assign.env = caller)
+
+    # Same condition as in `assign_alias`
+    if (is.null(spec$attach) || spec$explicit) {
         bind_attached(spec$alias, export_name = NULL, import_env = caller, import_when_used = import_when_used)
     }
-    
+
     if (! is.null(spec$attach)) {
         import_env = find_import_env(caller, spec, info, mod_ns = NULL)
-        
+
         for (i in seq_along(spec$attach)) {
             bind_attached(names(spec$attach)[i], spec$attach[[i]], import_env, import_when_used)
         }
+    }
+}
+
+#' @rdname importing
+check_lazy_target = function (info) {
+    UseMethod('check_lazy_target')
+}
+
+`check_lazy_target.box$mod_info` = function (info) {}
+
+`check_lazy_target.box$pkg_info` = function (info) {
+    pkg = info$name
+    is_available = ! is.null(base::.getNamespace(pkg)) ||
+        length(find.package(pkg, quiet = TRUE)) > 0L
+    if (! is_available) {
+        throw('there is no package called {pkg;"}')
     }
 }
 
@@ -401,7 +440,7 @@ bind_attached = function (alias, export_name, import_env, import_when_used) {
             env_get(mod_exports, export_name)
         }
     }
-    
+
     delayedAssign(alias, promise(), assign.env = import_env)
 }
 

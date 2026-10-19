@@ -1,8 +1,9 @@
 # Module/package specification expression grammar as a PEG, approximating the R
 # parse tree:
 #
-# declaration → “~”? spec
-# spec        → pkg_name (“[” attach_spec “]”)? !“/”?“~” /
+# declaration → “lazy” “(” spec “)” /
+#               spec
+# spec        → pkg_name (“[” attach_spec “]”)? !“/” /
 #               mod
 # pkg_name    → name
 # mod         → mod_prefix “/” mod_name (“[” attach_spec “]”)?
@@ -16,18 +17,20 @@
 #
 # Note: This is missing the alias declaration, since that is not captured in the
 # AST provided by R. It is instead handled separately.
-# A leading “~” marks a lazy import. It is only valid in front of a complete
-# spec, and “...” attach lists are rejected for lazy imports.
+# A “lazy(spec)” call marks a lazy import. It is only valid as the outermost
+# call of a declaration, and “...” attach lists are rejected for lazy imports.
 
 #' Parse a mod or pkg spec expression passed to \code{use}
-#' 
+#'
 #' @details
-#' A declaration prefixed with \code{~} (for example \code{~dplyr} or
-#' \code{~./mod[a, b]}) marks a lazy import. The marker is removed before the
-#' declaration is parsed, so lazy declarations accept the same forms as ordinary
-#' ones, and it is recorded in the \code{lazy} field. Wildcard attach lists
-#' (\code{~pkg[...]}) are rejected, since the exported names are only known after
-#' loading.
+#' A declaration wrapped in \code{lazy()} (for example \code{lazy(dplyr)} or
+#' \code{lazy(./mod[a, b])}) marks a lazy import. The wrapper is removed before
+#' the declaration is parsed, so lazy declarations accept the same forms as
+#' ordinary ones, and it is recorded in the \code{lazy} field. An alias goes
+#' outside the wrapper, as in \code{alias = lazy(pkg)}. \code{lazy()} must be
+#' the outermost call of a declaration, takes exactly one unnamed argument, and
+#' cannot be nested. Wildcard attach lists (\code{lazy(pkg[...])}) are rejected,
+#' since the exported names are only known after loading.
 #'
 #' @param expr the mod or pkg spec expression to parse
 #' @param alias the mod or pkg spec alias as a character, or \code{NULL}
@@ -42,16 +45,16 @@
 #'  \item{\code{explicit}}{a logical value indicating whether the caller
 #'      provided an explicit alias}
 #'  \item{\code{lazy}}{a logical value indicating whether the caller lazily
-#'      import the module}
+#'      imports the module}
 #' }
-#' 
+#'
 #' @keywords internal
 #' @name spec
 parse_spec = function (expr, alias) {
     is_lazy = is_lazy_import(expr)
-    spec = parse_spec_impl(if (is_lazy) expr[[2L]] else expr)
+    spec = parse_spec_impl(strip_lazy_import(expr))
     if (is_lazy && anyNA(spec$attach)) {
-        throw('cannot lazily import all names in {expr;"}; list the names or remove the leading ~')
+        throw('cannot lazily import all names in {expr;"}; list the names or remove lazy()')
     }
 
     is_pkg = 'pkg' %in% names(spec)
@@ -60,11 +63,61 @@ parse_spec = function (expr, alias) {
     spec_type(spec, alias = alias %||% name, explicit = nzchar(alias), lazy = is_lazy)
 }
 
-#' @return \code{is_lazy_import} returns \code{TRUE} if \code{expr} is a unary
-#' \code{~} call, and \code{FALSE} otherwise.
+lazy = function (mod) {
+    box_error()
+}
+
+#' @return \code{is_lazy_import} returns \code{TRUE} if \code{expr} is a call to
+#' \code{lazy}, and \code{FALSE} otherwise. It does not validate the call.
 #' @rdname spec
 is_lazy_import = function (expr) {
-    is.call(expr) && expr[[1L]] == '~' && length(expr) == 2L
+    is.call(expr) && expr[[1L]] %==% quote(lazy)
+}
+
+#' @return \code{strip_lazy_import} returns the declaration without its
+#' \code{lazy()} wrapper, or unchanged if it has none. It rejects a
+#' \code{lazy()} call that does not have exactly one unnamed argument, and any
+#' \code{lazy()} that is not the outermost call. It must not store \code{expr}
+#' in a local variable, since \code{expr} can be the empty argument of a
+#' declaration such as \code{alias = }, which is reported later by the parser.
+#' @rdname spec
+strip_lazy_import = function (expr) {
+    if (is_lazy_import(expr)) {
+        if (length(expr) != 2L) {
+            throw('expected exactly one declaration in {expr;"}, got {length(expr) - 1L}')
+        }
+        if (nzchar(names(expr)[2L] %||% '')) {
+            throw('cannot give an alias inside {expr;"}; write the alias outside, as in alias = lazy(...)')
+        }
+        if (contains_lazy_import(expr[[2L]])) {
+            throw('lazy() must be the outermost call of a declaration, found in {expr;"}')
+        }
+        expr[[2L]]
+    } else if (contains_lazy_import(expr)) {
+        throw('lazy() must be the outermost call of a declaration, found in {expr;"}')
+    } else {
+        expr
+    }
+}
+
+#' @return \code{contains_lazy_import} returns \code{TRUE} if \code{lazy()}
+#' appears anywhere in the declaration expression \code{expr}. It only descends
+#' into the positions that can hold a spec (the operands of \code{/} and the
+#' first operand of \code{[}), so empty arguments in attach lists are never
+#' touched.
+#' @rdname spec
+contains_lazy_import = function (expr) {
+    if (! is.call(expr)) {
+        FALSE
+    } else if (is_lazy_import(expr)) {
+        TRUE
+    } else if (expr[[1L]] %==% quote(`[`)) {
+        contains_lazy_import(expr[[2L]])
+    } else if (expr[[1L]] %==% quote(`/`)) {
+        contains_lazy_import(expr[[2L]]) || contains_lazy_import(expr[[3L]])
+    } else {
+        FALSE
+    }
 }
 
 #' @param spec named list of information the parser constructed from a given
