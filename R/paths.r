@@ -253,6 +253,48 @@ mod_search_path = function (caller) {
     )
 }
 
+#' \code{baler_mod_search_path} returns the character vector of directories
+#' where modules installed by \code{baler} are searched for.
+#'
+#' @details
+#' \code{baler_mod_search_path} picks a single modules directory:
+#' \enumerate{
+#'  \item If the environment variable \env{BALER_LIB} is set, that directory is
+#'      used instead of the global one. This lets \code{baler} point \pkg{box}
+#'      at the modules of a virtual environment.
+#'  \item Otherwise, the global directory \file{.baler/modules} in the user's
+#'      home directory is used (\env{USERPROFILE} on Windows, \env{HOME}
+#'      elsewhere).
+#' }
+#' If the chosen directory does not exist, the search path is empty and no
+#' module is treated as installed by \code{baler}.
+#'
+#' The search path is determined the first time it is needed and reused for the
+#' rest of the R session. Restart R after changing \env{BALER_LIB}.
+#' @rdname paths
+baler_mod_search_path = function (caller) {
+    if (is.null(baler_cache[['.search_path']])) {
+        lib = Sys.getenv('BALER_LIB')
+        mod_dir = if (nzchar(lib)) {
+            lib
+        } else {
+            file.path(
+                Sys.getenv('USERPROFILE') %||% Sys.getenv('HOME'),
+                '.baler',
+                'modules'
+            )
+        }
+
+        baler_cache[['.search_path']] = if (dir.exists(mod_dir)) {
+            mod_dir
+        } else {
+            character(0L)
+        }
+    }
+
+    baler_cache[['.search_path']]
+}
+
 #' \code{calling_mod_path} determines the path of the module code that is
 #' currently calling into the \pkg{box} package.
 #'

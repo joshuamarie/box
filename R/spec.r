@@ -58,13 +58,29 @@ parse_spec = function (expr, alias) {
     }
 
     is_pkg = 'pkg' %in% names(spec)
-    spec_type = if (is_pkg) pkg_spec else mod_spec
     name = spec[[if (is_pkg) 'pkg' else 'mod']]$name
-    spec_type(spec, alias = alias %||% name, explicit = nzchar(alias), lazy = is_lazy)
-}
+    root = if (is_pkg) name else spec$mod$prefix[1L]
+    search_paths = baler_mod_search_path(parent.frame())
 
-lazy = function (mod) {
-    box_error()
+    # Special imports: modules installed by `baler`. This only matches when the
+    # root of the declaration exists in the `baler` search paths.
+    if (baler_root_exists(root, search_paths)) {
+        baler = baler_spec_parser(
+            spec = spec,
+            root = root,
+            name = name,
+            prefix = if (is_pkg) '.' else spec$mod$prefix,
+            alias = alias,
+            search_paths = search_paths,
+            lazy = is_lazy
+        )
+
+        if (!is.null(baler)) return(baler)
+    }
+
+    # Otherwise, an ordinary module or package is loaded
+    spec_type = if (is_pkg) pkg_spec else mod_spec
+    spec_type(spec, alias = alias %||% name, explicit = nzchar(alias), lazy = is_lazy)
 }
 
 #' @return \code{is_lazy_import} returns \code{TRUE} if \code{expr} is a call to
@@ -140,6 +156,111 @@ pkg_spec = function (spec, ...) {
 
 #' @keywords internal
 #' @name spec
+baler_spec = function (spec, ...) {
+    extra_spec = spec[setdiff(names(spec), 'baler_pkg')]
+    structure(
+        c(spec$baler_pkg, extra_spec, ...),
+        class = c('box$baler_spec', 'box$spec')
+    )
+}
+
+#' @keywords internal
+#' @rdname baler-spec
+baler_cache = new.env(parent = emptyenv())
+
+#' @keywords internal
+#' @rdname baler-spec
+baler_root_exists = function (root, search_paths) {
+    roots = baler_cache[['.roots']]
+    if (is.null(roots)) {
+        listed = unlist(lapply(search_paths, list.files, full.names = FALSE))
+        names = unique(sub('\\.[^.]*$', '', listed))
+        roots = new.env(parent = emptyenv())
+        for (name in names) {
+            roots[[name]] = TRUE
+        }
+        baler_cache[['.roots']] = roots
+    }
+    exists(root, envir = roots, inherits = FALSE)
+}
+
+#' Autonomous `baler` modules spec parser
+#'
+#' @details
+#' Loading `baler` modules is a separate thing while borrows the syntax,
+#' except loading `baler` modules doesn't allow prefixes (`./`, `../`)
+#'
+#' ``` r
+#' # Good
+#' box::use(
+#'     baler_module,
+#'     baler_module/mod,
+#'     baler_module/mod[fn1, ...],
+#'     cm = baler_module,
+#' )
+#'
+#' # Bad
+#' box::use(
+#'     ./baler_module,
+#'     ./baler_module/mod,
+#'     ./baler_module/mod[fn1, ...],
+#'     cm = ./baler_module,
+#' )
+#' ```
+#'
+#' @keywords internal
+#' @name baler-spec
+baler_spec_parser = function (spec, root, name, prefix, alias, search_paths, lazy = FALSE) {
+    if ('mod' %in% names(spec) && spec$mod$prefix[1L] %in% c('.', '..')) {
+        return(NULL)
+    }
+
+    name_io = list(
+        baler_pkg = list(name = name),
+        attach = spec$attach,
+        alias = alias %||% name,
+        explicit = nzchar(alias),
+        prefix = prefix,
+        lazy = lazy
+    )
+
+    # Bare package import (`box::use(baler_module)`):
+    # the root check and the final resolution target the same candidate paths,
+    # so resolve once here and carry the result forward instead of stat-ing
+    # the same files twice.
+    if (identical(prefix, '.') && identical(name, root)) {
+        baler = baler_spec(name_io)
+        info = find_in_path(baler, search_paths, strict = FALSE)
+
+        if (is.null(info)) return(NULL)
+
+        attr(baler, 'resolved_info') = info
+        return(baler)
+    }
+
+    # Submodule import (`box::use(baler_module/mod)`):
+    # root and target are different candidate paths, both checks are needed,
+    # keep them separate so a missing submodule still produces the baler-specific
+    # not-found error instead of silently falling through to ordinary box resolution.
+    root_spec = baler_spec(
+        list(
+            baler_pkg = list(name = root),
+            attach = NULL,
+            alias = root,
+            explicit = FALSE,
+            prefix = '.'
+        )
+    )
+    candidates = mod_file_candidates(root_spec, search_paths)
+    hits = map(file.exists, candidates)
+
+    if (! any(map_lgl(any, hits))) return(NULL)
+
+    baler_spec(name_io)
+}
+
+#' @keywords internal
+#' @name spec
 spec_name = function (spec) {
     UseMethod('spec_name')
 }
@@ -151,6 +272,11 @@ spec_name = function (spec) {
 
 #' @export
 `spec_name.box$pkg_spec` = function (spec) {
+    spec$name
+}
+
+#' @export
+`spec_name.box$baler_spec` = function (spec) {
     spec$name
 }
 
@@ -188,7 +314,9 @@ spec_name = function (spec) {
     }
 
     mod_or_pkg = function (spec) {
-        if (inherits(spec, 'box$mod_spec')) {
+        if (inherits(spec, 'box$baler_spec')) {
+            fmt('mod_baler(\x1b[4;33m{r_name(spec$prefix)}/{r_name(spec$name)}\x1b[0m)')
+        } else if (inherits(spec, 'box$mod_spec')) {
             prefix = paste(r_name(spec$prefix), collapse = '/')
             fmt('mod({prefix}/\x1b[4;33m{r_name(spec$name)}\x1b[0m)')
         } else {

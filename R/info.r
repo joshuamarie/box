@@ -24,6 +24,16 @@ pkg_info = function (spec) {
     structure(list(name = spec$name), class = c('box$pkg_info', 'box$info'))
 }
 
+#' A \code{baler_info} represents an existing module installed by `baler`.
+#' @keywords internal
+#' @name info
+baler_info = function (spec, inst_mod_path) {
+    structure(
+        list(name = spec$name, inst_mod_path = inst_mod_path),
+        class = c('box$baler_info', 'box$info')
+    )
+}
+
 #' @export
 `print.box$info` = function (x, ...) {
     cat(as.character(x, ...), '\n', sep = '')
@@ -39,6 +49,11 @@ pkg_info = function (spec) {
 `as.character.box$pkg_info` = function (x, ...) {
     path = getNamespaceInfo(x$name, 'path')
     fmt('<mod_info: \x1B[33m{path}\x1B[0m>')
+}
+
+#' @export
+`as.character.box$baler_info` = function (x, ...) {
+    fmt('<mod_info: \x1B[33m{x$name}\x1B[0m at \x1B[33m{x$inst_mod_path}\x1B[0m>')
 }
 
 is_absolute = function (spec) {
@@ -57,6 +72,12 @@ find_mod = function (spec, caller) {
     pkg_info(spec)
 }
 
+`find_mod.box$baler_spec` = function (spec, caller) {
+    resolved = attr(spec, 'resolved_info', exact = TRUE)
+    if (!is.null(resolved)) return(resolved)
+    find_in_path(spec, baler_mod_search_path(caller))
+}
+
 find_local_mod = function (spec, caller) {
     find_in_path(spec, calling_mod_path(caller))
 }
@@ -71,8 +92,13 @@ find_global_mod = function (spec, caller) {
 #' @param spec a \code{mod_spec}.
 #' @param base_paths a character vector of paths to search the module in, in
 #' order of preference.
+#' @param strict whether to throw an error if the module cannot be found.
+#' When \code{FALSE}, a failed lookup returns \code{NULL} instead, for
+#' callers that need to test for existence without treating a miss as fatal
+#' (e.g. \code{baler_spec_parser}'s bare-package check).
 #' @return \code{find_in_path} returns a \code{mod_info} that specifies the
-#' module source location.
+#' module source location, or \code{NULL} if the module was not found and
+#' \code{strict} is \code{FALSE}.
 #' @details
 #' A module is physically represented in the file system either by
 #' \file{‹spec_name(spec)›.r} or by \file{‹spec_name(spec)›/__init__.r}, in that
@@ -80,12 +106,13 @@ find_global_mod = function (spec, caller) {
 #' to allow for R’s obsession with capital-R extensions (but lower-case are
 #' given preference, and upper-case file extensions are discouraged).
 #' @keywords internal
-find_in_path = function (spec, base_paths) {
+find_in_path = function (spec, base_paths, strict = TRUE) {
     candidates = mod_file_candidates(spec, base_paths)
     hits = map(file.exists, candidates)
     which_base = which(map_lgl(any, hits))[1L]
 
     if (is.na(which_base)) {
+        if (! strict) return(NULL)
         throw(
             'unable to load module {spec_name(spec);"}; ',
             'not found in {base_paths;"}'
